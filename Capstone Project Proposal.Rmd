@@ -1,0 +1,19 @@
+---
+title: "Capstone Project Proposal"
+author: "Zach Young"
+date: "October 8, 2018"
+output: html_document
+---
+
+Capstone Project Idea 1: Using sequenced genetic code data, predict whether the resulting protein is likely to be a membrane or a non-membrane protein. 
+
+Problem: Find a faster, more efficient and more cost-effective method for identifying protein structure and function using sequenced genomic data. Proteins are the building blocks of all cells and are responsible for all of the essential processes of life. One of the biggest distinguishers of function amongst proteins is whether they are located within the membrane of the cell, or on the inside of the cell. Accurately identifying the location of a protein is thus an important task and improving upon existing laboratory methods of identification will save huge amounts of both time and money.  
+
+Potential clients: Because of the essential role that proteins play throughout the various cells and tissues of the human body, they are a major target of research efforts into human disease and drug discovery. Being able to identify protein function and location is an important step for scientists conducting research in both the public and private sectors. For decades, in order to study a protein, it had to be isolated and precipitated individually from a cell, usually at an incredibly high cost, both in terms of time and money. With the advancement of genomic sequencing technologies, we are now capable of generating huge amounts of biological data at ever decreasing costs. Unlocking the insights from this data is critical to current research endeavors and accurate protein prediction has been a major emphasis in the field.   
+
+Data and how to aquire it: The data I will be using will be mRNA sequence data acquired from the NCBI (National Center for Biotechnology Information) database. The data will come in a FASTA format and will simply be the entire base code, represented by the letters A, C, G, and T, for my chosen proteins. I will choose ten different proteins, five membrane and five non-membrane, all between a length of 1,000 to 2,000 base pairs. Descriptions of the proteins can be found in the same database and I will pick proteins whose locations in the cell have been previously verified in the laboratory.
+
+Solving the problem: To the solve the problem, I will first need to convert the base code into the protein's amino acid profile. Each amino acid corresponds to a triplet codon of base pairs and each amino acid has specific chemical properties. In particular, every amino acid has a specific hydrophopic value. This is importantant because biological membranes are extremely hydrophobic and any protein that passes thru or resides within a membrane will also have a high percentage of hydrophobic amino acids within the section that interacts directly with the membrane. Once I have the amino acid sequence, I can translate that into a plot of hydrophobic values. Membrane proteins should be distinguished by long stretches of hydrophobicity on the plot and I will compare the plots to known, empirical results.
+
+Deliverables: The deliverables from this project will be a write-up of the problem and the benefits of improving the methods for prediction, along with the code to accomplish the task and the resulting plots. 
+
