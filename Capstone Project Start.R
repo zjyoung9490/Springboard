@@ -1,8 +1,11 @@
 library(tidyr)
 library(dplyr)
+library(ggplot2)
+install.packages("zoo")
+library(zoo)
 
 #Convert FASTA file into a dataframe
-df <- data.frame(matrix(unlist(AQP5), nrow = 1, byrow = T), stringsAsFactors = FALSE) 
+df <- data.frame(matrix(unlist(), nrow = 1, byrow = T), stringsAsFactors = FALSE) 
 
 #Unite dataframe into single column for analysis
 df1 <- unite(df, X1:X27) 
@@ -59,7 +62,7 @@ aa_conversion <- function(final_df) {
   final_df = gsub("CTC", "Leu", final_df)
   final_df = gsub("CTA", "Leu", final_df)
   final_df = gsub("CTG", "Leu", final_df)
-  final_df = gsub("TTa", "Leu", final_df)
+  final_df = gsub("TTA", "Leu", final_df)
   final_df = gsub("TTG", "Leu", final_df)
   #Lysine
   final_df = gsub("AAA", "Lys", final_df)
@@ -128,7 +131,7 @@ hyd_values <- function(final_df){
   final_df = gsub("Asn", "-3.5", final_df)
   final_df = gsub("Lys", "-3.9", final_df)
   final_df = gsub("Arg", "-4.5", final_df)
-  final_df = gsub("Stop", "NA", final_df)
+  final_df = gsub("Stop", "0", final_df)
 }
 
 #Assign amino acids hydrophobic values
@@ -139,5 +142,19 @@ colnames(final_df)[1] <- "Codon"
 colnames(final_df)[2] <- "Amino Acid"
 colnames(final_df)[3] <- "Hydrophobic Value"
 
+final_df$AA_position <- 1:578
+final_df$`Hydrophobic Value` <- as.numeric(final_df$`Hydrophobic Value`)
+final_df$`Amino Acid` <- factor(final_df$`Amino Acid`)
 
+final_df$Index <- rollapplyr(final_df$`Hydrophobic Value`, 17, mean, partial=TRUE)
+
+#Hydropathy Plot
+ggplot(final_df, aes(x = AA_position, y = Index)) +
+  geom_line() +
+  geom_hline(yintercept = 0)+
+  ylim(-2, 2) +
+  coord_fixed(ratio = 50)
+
+#Summary Statistics
+mean(final_df$`Hydrophobic Value`, na.rm = TRUE)
 
