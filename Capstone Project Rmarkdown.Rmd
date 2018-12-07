@@ -1,0 +1,87 @@
+---
+title: "Capstone Project Proposal"
+author: "Zach Young"
+date: "October 8, 2018"
+output: html_document
+---
+
+Capstone Project Idea 1: Using sequenced genetic code data, predict whether the resulting protein is likely to be a membrane or a non-membrane protein. 
+
+Problem: Find a faster, more efficient and more cost-effective method for identifying protein structure and function using sequenced genomic data. Proteins are the building blocks of all cells and are responsible for all of the essential processes of life. One of the biggest distinguishers of function amongst proteins is whether they are located within the membrane of the cell, or on the inside of the cell. Accurately identifying the location of a protein is thus an important task and improving upon existing laboratory methods of identification will save huge amounts of both time and money.  
+
+Potential clients: Because of the essential role that proteins play throughout the various cells and tissues of the human body, they are a major target of research efforts into human disease and drug discovery. Being able to identify protein function and location is an important step for scientists conducting research in both the public and private sectors. For decades, in order to study a protein, it had to be isolated and precipitated individually from a cell, usually at an incredibly high cost, both in terms of time and money. With the advancement of genomic sequencing technologies, we are now capable of generating huge amounts of biological data at ever decreasing costs. Unlocking the insights from this data is critical to current research endeavors and accurate protein prediction has been a major emphasis in the field.   
+
+Data and how to aquire it: The data I will be using will be mRNA sequence data acquired from the NCBI (National Center for Biotechnology Information) database. The data will come in a FASTA format and will simply be the entire base code, represented by the letters A, C, G, and T, for my chosen proteins. I will choose 40 different proteins, 20 membrane and 20 non-membrane. Descriptions of the proteins can be found in the same database and I will pick proteins whose locations in the cell have been previously verified in the laboratory.
+
+Solving the problem: To the solve the problem, I will first need to convert the base code into the protein's amino acid profile. Each amino acid corresponds to a triplet codon of base pairs and each amino acid has specific chemical properties. In particular, every amino acid has a specific hydrophobic value. This is importantant because biological membranes are extremely hydrophobic and any protein that passes thru or resides within a membrane will also have a high percentage of hydrophobic amino acids within the section that interacts directly with the membrane. Once I have the amino acid sequence, I can translate that into a plot of hydrophobic values. Hydrophobicity plots have traditionally been used to identify transmembrane regions within proteins. Additionally, I will calculate averages for various characteristics of the proteins based off their amino acid profile to hopefully find identifiable characteristics that can be used to distinguish membrane proteins versus non-membrane proteins. Finally, I will incorporate these findings into a model that will be able to indetify protein type based off genomic data.
+
+Deliverables: The deliverables from this project will be a write-up of the problem and the benefits of improving the methods for prediction, the code to accomplish the task and a model to predict protein type based off genetic data. 
+
+Code Review:
+
+#Convert from FASTA format to data frame with codons
+```{r 
+df <- data.frame(matrix(unlist(XRCC1), nrow = 1, byrow = T), stringsAsFactors = FALSE) 
+df <- df[ , colSums(is.na(df)) == 0]
+df1 <- unite(df, X1)
+df2 <- gsub("_", "", df1)
+df3 <- strsplit(df2, '(?<=.{3})', perl = TRUE)
+df4 <- data.frame(matrix(unlist(df3), nrow = 1, byrow = T), stringsAsFactors = FALSE) 
+final_df <- as.data.frame(t(df4))}
+```
+This code first loads the data into a data frame. Then anything that is not genetic code is removed and placed into one column. This column is then broken into a list and split into triplets that correspond to the codons of the protein. Finally, the list is converted back to a data frame and the data frame is flipped so that there is one column with a codon in every row. 
+
+#Fill in data frame with amino acids, hydrophobic values and index values
+```{r
+final_df$Amino_Acid <- sapply(final_df, aa_conversion)                 
+final_df$Hyd_Value <- sapply(final_df$Amino_Acid, hyd_values)
+final_df$AA_position <- 1:nrow(final_df)
+final_df$Index <- rollapplyr(final_df$`Hydrophobic Value`, 20, mean, partial=TRUE)}
+
+```
+This code uses custom functions that create new columns for amino acids and hydrophobic values. Each codon specifies a particular amino acid, and the function uses gsub to assign an amino acid to each codon in a new column. Similary, each amino acid has a particular hydrophobic value that is likewise filled in using gsub. An amino acid postion column is also created to order the amino acids from beginning to end. Finally, an index value based off the hydrophobic value is calculated using a rolling average function. This index value is essential to contructing hydophobic plots. 
+
+#Hydrophobic plot
+
+```{r
+ ggplot(final_df, aes(x = AA_position, y = Index)) +
+  geom_line() +
+  geom_hline(yintercept = 0)+
+  ylim(-2, 2) +
+  coord_fixed(ratio = 50) }
+```
+
+#Calculating summary statistics for the protein
+
+```{r
+aa_vector <- table(final_df$`Amino Acid`)
+unlist(aa_vector)
+all_amino.acids <- aa_vector[c("Ala", "Arg", "Asn", "Asp", "Cys", "Gln", "Glu", "Gly", "His", "Ile", "Leu", "Lys", "Met", "Phe", "Pro", "Ser", "Thr", "Trp", "Tyr", "Val")]
+hydrophobic <- aa_vector[c("Ala", "Cys", "Ile", "Leu", "Met", "Phe", "Val")]
+#Average hydrophobic value of entire protein
+x <- mean(final_df$`Hydrophobic Value`, na.rm = TRUE)
+#Percentage of all amino acids in protein
+y <- (all_amino.acids/nrow(final_df)) *100
+#Percentage of all hydrophobic amino acids in protein
+z <- ((sum(hydrophobic))/nrow(final_df)) *100
+#Number of times Index is greater or equal to 1.6
+i <- sum(final_df$Index >= 1.6, na.rm = TRUE)}
+
+```
+The code calculates various summary statistics for the protein based off the amino acid profile. First, all amino acids our unlisted from the data frame and assigned to the vector all_amino.acids. Using this vector, the percentage of all amino acids in the protein are calculated and assigned to the table y. Next, only hydrophobic amino acids are placed into a separate vector called hydrophobic. This vector is used to calculate the percentage of hydrophobic amino acids in the protein and assigned to value z. The average hydrophobic value of the entire protein is calculated and assigned to value x. Finally, the number of times the Index value exceeds 1.6 is calculated and assigned to value i. An index value over 1.6 is a strong indication of a transmembrane region within a protein. 
+
+#Creating data frame of summary statistics and adding to final data frame
+
+```{r
+A <- data.frame(x, y, z, i) 
+A <- spread(A, Var1, Freq)
+A["Type"] <- "Non-membrane"
+A["Protein"] <- "XRCC1"
+A <- A[colnames(A)[c(25, 24, 1:23)]]
+colnames(A)[3] <- "Average_Hydrophobic"
+colnames(A)[4] <- "Percentage_Hydrophobic"
+colnames(A)[5] <- "Index_Count"
+protein_comp_df <- full_join(protein_comp_df, A)}
+
+```
+This section of code takes the statistics captured from the protein in values x, z and i as well as table y and creates a data frame A. The type of protein, transmembrane or non-membrane, is added to the data frame and so is the actual name of the protein. The data frame is then cleaned up and column names are added. Finally, once each protein data frame is completed it is added to the final data frame (protein_comp_df) which contains information for every protein analyzed. This data frame is what will ultimately be used to compare the characteristics between each type of protein and wil contain the data to develop my predictive model.
