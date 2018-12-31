@@ -1,0 +1,493 @@
+---
+title: "Capstone Project"
+author: "Zach Young"
+date: "December 24, 2018"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r include = FALSE}
+library(tidyr)
+library(readr)
+library(plyr)
+library(ggplot2)
+library(dplyr)
+library(zoo)
+library(ROCR)
+library(C50)
+```
+
+
+# **Problem Discovery:** 
+
+  Find a faster, more efficient and more cost-effective method for identifying protein structure and function using sequenced genomic data. Proteins are the building blocks of all cells and are responsible for all of the essential processes of life. One of the biggest distinguishers of function amongst proteins is whether they are located within the membrane of the cell, or on the inside of the cell. Accurately identifying the location of a protein is thus an important task and improving upon existing laboratory methods of identification will save huge amounts of both time and money.
+
+## Potential clients 
+
+  Because of the essential role that proteins play throughout the various cells and tissues of the human body, they are a major target of research efforts into human disease and drug discovery. Being able to identify protein function and location is an important step for scientists conducting research in both the public and private sectors. For decades, in order to study a protein, it had to be isolated and precipitated individually from a cell, usually at an incredibly high cost, both in terms of time and money. With the advancement of genomic sequencing technologies, we are now capable of generating huge amounts of biological data at ever decreasing costs. Unlocking the insights from this data is critical to current research endeavors and accurate protein prediction has been a major emphasis in the field.  
+
+## Data and how to aquire it
+
+  The data I will be using will be mRNA sequence data acquired from the NCBI (National Center for Biotechnology Information) database. The data will come in a FASTA format and will simply be the entire base code, represented by the letters A, C, G, and T, for my chosen proteins (see below). I will choose 52 different proteins, 25 membrane and 27 non-membrane. Descriptions of the proteins can be found in the same database and I will pick proteins whose locations in the cell, i.e. transmembrane vs non-membrane, have been previously verified in the laboratory. 
+
+```{r echo = FALSE, warning=FALSE, message=FALSE}
+AQP5 <- read_csv("AQP5")
+print(AQP5)
+```
+
+## Solving the problem 
+
+  To the solve the problem, I will first need to convert the base code into the protein's amino acid profile. Every amino acid corresponds to a triplet codon of base pairs and each amino acid has specific chemical properties. In particular, every amino acid has a specific hydrophobic value. This is importantant because biological membranes are extremely hydrophobic and any protein that passes thru or resides within a membrane will also have a high percentage of hydrophobic amino acids within the section that interacts directly with the membrane. Once I have the amino acid sequence, I can translate that into a plot of hydrophobic values. Hydrophobicity plots have traditionally been used to identify transmembrane regions within proteins. Additionally, I will calculate averages for various characteristics of the proteins based off their amino acid profile to hopefully find identifiable characteristics that can be used to distinguish membrane proteins versus non-membrane proteins. Finally, I will incorporate these findings into a model that will be able to identify protein type based off genomic data.
+
+## Deliverables
+
+  The deliverables from this project will be a write-up of the problem and the benefits of improving the methods for prediction, the code to accomplish the task and a model to predict protein type based off genetic data.
+
+# **Data Gathering and Wrangling:**
+
+
+```{r echo = FALSE}
+#Create custom function to convert codons into amino acid counterpart
+aa_conversion <- function(final_df) {
+  #Alanine
+  final_df = gsub("GCT", "Ala", final_df)
+  final_df = gsub("GCC", "Ala", final_df)
+  final_df = gsub("GCA", "Ala", final_df)
+  final_df = gsub("GCG", "Ala", final_df)
+  #Arginine
+  final_df = gsub("CGG", "Arg", final_df)
+  final_df = gsub("CGC", "Arg", final_df)
+  final_df = gsub("CGT", "Arg", final_df)
+  final_df = gsub("CGA", "Arg", final_df)
+  final_df = gsub("AGA", "Arg", final_df)
+  final_df = gsub("AGG", "Arg", final_df)
+  #Asparagine
+  final_df = gsub("AAT", "Asn", final_df)
+  final_df = gsub("AAC", "Asn", final_df)
+  #Aspartic Acid
+  final_df = gsub("GAT", "Asp", final_df)
+  final_df = gsub("GAC", "Asp", final_df)
+  #Cysteine
+  final_df = gsub("TGT", "Cys", final_df)
+  final_df = gsub("TGC", "Cys", final_df)
+  #Glutamic Acid
+  final_df = gsub("GAA", "Glu", final_df)
+  final_df = gsub("GAG", "Glu", final_df)
+  #Glutamine
+  final_df = gsub("CAA", "Gln", final_df)
+  final_df = gsub("CAG", "Gln", final_df)
+  #Glycine
+  final_df = gsub("GGT", "Gly", final_df)
+  final_df = gsub("GGC", "Gly", final_df)
+  final_df = gsub("GGA", "Gly", final_df)
+  final_df = gsub("GGG", "Gly", final_df)
+  #Histidine
+  final_df = gsub("CAT", "His", final_df)
+  final_df = gsub("CAC", "His", final_df)
+  #Isoleucine
+  final_df = gsub("ATT", "Ile", final_df)
+  final_df = gsub("ATC", "Ile", final_df)
+  final_df = gsub("ATA", "Ile", final_df)
+  #Leucine
+  final_df = gsub("CTT", "Leu", final_df)
+  final_df = gsub("CTC", "Leu", final_df)
+  final_df = gsub("CTA", "Leu", final_df)
+  final_df = gsub("CTG", "Leu", final_df)
+  final_df = gsub("TTA", "Leu", final_df)
+  final_df = gsub("TTG", "Leu", final_df)
+  #Lysine
+  final_df = gsub("AAA", "Lys", final_df)
+  final_df = gsub("AAG", "Lys", final_df)
+  #Methionine
+  final_df = gsub("ATG", "Met", final_df)
+  #Phenylalanine
+  final_df = gsub("TTT", "Phe", final_df)
+  final_df = gsub("TTC", "Phe", final_df)
+  #Proline
+  final_df = gsub("CCT", "Pro", final_df)
+  final_df = gsub("CCC", "Pro", final_df)
+  final_df = gsub("CCA", "Pro", final_df)
+  final_df = gsub("CCG", "Pro", final_df)
+  #Serine
+  final_df = gsub("TCT", "Ser", final_df)
+  final_df = gsub("TCC", "Ser", final_df)
+  final_df = gsub("TCA", "Ser", final_df)
+  final_df = gsub("TCG", "Ser", final_df)
+  final_df = gsub("AGT", "Ser", final_df)
+  final_df = gsub("AGC", "Ser", final_df)
+  #Threonine
+  final_df = gsub("ACC", "Thr", final_df)
+  final_df = gsub("ACT", "Thr", final_df)
+  final_df = gsub("ACA", "Thr", final_df)
+  final_df = gsub("ACG", "Thr", final_df)
+  #Tyrosine
+  final_df = gsub("TAT", "Tyr", final_df)
+  final_df = gsub("TAC", "Tyr", final_df)
+  #Tryptophan
+  final_df = gsub("TGG", "Trp", final_df)
+  #Valine
+  final_df = gsub("GTT", "Val", final_df)
+  final_df = gsub("GTC", "Val", final_df)
+  final_df = gsub("GTA", "Val", final_df)
+  final_df = gsub("GTG", "Val", final_df)
+  #Stop Codons
+  final_df = gsub("TAA", "Stop", final_df)
+  final_df = gsub("TAG", "Stop", final_df)
+  final_df = gsub("TGA", "Stop", final_df)
+  return(final_df)
+}
+
+#Create custom function to apply hydrophobic values to amino acids
+hyd_values <- function(final_df){
+  final_df = gsub("Ile", "4.5", final_df)
+  final_df = gsub("Val", "4.2", final_df)
+  final_df = gsub("Leu", "3.8", final_df)
+  final_df = gsub("Phe", "2.8", final_df)
+  final_df = gsub("Cys", "2.5", final_df)
+  final_df = gsub("Met", "1.9", final_df)
+  final_df = gsub("Ala", "1.8", final_df)
+  final_df = gsub("Gly", "-0.4", final_df)
+  final_df = gsub("Thr", "-0.7", final_df)
+  final_df = gsub("Ser", "-0.8", final_df)
+  final_df = gsub("Trp", "-0.9", final_df)
+  final_df = gsub("Tyr", "-1.3", final_df)
+  final_df = gsub("Pro", "-1.6", final_df)
+  final_df = gsub("His", "-3.2", final_df)
+  final_df = gsub("Glu", "-3.5", final_df)
+  final_df = gsub("Gln", "-3.5", final_df)
+  final_df = gsub("Asp", "-3.5", final_df)
+  final_df = gsub("Asn", "-3.5", final_df)
+  final_df = gsub("Lys", "-3.9", final_df)
+  final_df = gsub("Arg", "-4.5", final_df)
+  final_df = gsub("Stop", "0", final_df)
+}
+```
+
+```{r echo = FALSE}
+ProteinComparison_df <- read.csv("ProteinComparison_df")
+ProteinComparison_df$X <- NULL
+ProteinComparison_df$Type <- as.character(ProteinComparison_df$Type)
+ProteinComparison_df$Protein <- as.character(ProteinComparison_df$Protein)
+ProteinComparison_df$Type2 <- NULL
+AA_mean <- read.csv("AA_mean")
+AA_mean$X <- NULL
+AA_mean$Type <- as.character(AA_mean$Type)
+ProteinComparison_df <- ProteinComparison_df[-c(1,2,3), ]
+```
+
+```{r echo= FALSE}
+train_df <- read.csv("train_df")
+train_df$X <- NULL
+train_df$Type2 <- factor(train_df$Type2)
+test_df <- read.csv("test_df")
+test_df$X <- NULL
+test_df$Type2 <- factor(test_df$Type2)
+```
+
+
+## Data Transformation
+
+### *Convert FASTA file into a dataframe*
+```{r}
+df <- data.frame(matrix(unlist(AQP5), nrow = 1, byrow = T), stringsAsFactors = FALSE) #converts base code into data frame with one row and multiple columns
+df <- df[ , colSums(is.na(df)) == 0] #removes all NAs from the data frame
+
+#Unite dataframe into single column for analysis
+df1 <- unite(df, X1) #unites all columns into one single column 
+df2 <- gsub("_", "", df1) #creates character string vector and removes and spaces
+
+#Split nucleotides into codons
+df3 <- strsplit(df2, '(?<=.{3})', perl = TRUE) #splits the character string vector into a list of triplets i.e. codons
+df4 <- data.frame(matrix(unlist(df3), nrow = 1, byrow = T), stringsAsFactors = FALSE) #creates a data frame from the df3 list with 1 row and each column containing a codon 
+final_df <- as.data.frame(t(df4)) #moves each column from df4 into a separate row; result is one column with a row containing every codon
+head(final_df, n =10)
+
+```
+
+  This code first loads the data into a data frame. Anything that is not genetic code is removed and the rest is placed into one column. This column is then broken into a list and split into triplets that correspond to the codons of the protein. Finally, the list is converted back to a data frame and the data frame is flipped so that there is one column with a codon in every row.
+
+### *Fill in data frame with amino acids, hydrophobic values and index values*
+```{r warning= FALSE}
+#Convert codons into amino acids 
+final_df$Amino_Acid <- sapply(final_df, aa_conversion) #applies the aa_conversion function to every row of the final_df resulting in a new column with every amino acid of the protein                
+
+#Assign amino acids hydrophobic values
+final_df$Hyd_Value <- sapply(final_df$Amino_Acid, hyd_values) #applies the  hyd_values function to every row of the Amino_Acid column resulting in a new column with a hydrophobic value specific to each amino acid
+
+#Change column names
+colnames(final_df)[1] <- "Codon"
+colnames(final_df)[2] <- "Amino Acid"
+colnames(final_df)[3] <- "Hydrophobic Value"
+
+#Constructing Hydropathy Plot
+final_df$AA_position <- 1:nrow(final_df) #creates a new column that orders amino acids by position
+final_df$`Hydrophobic Value` <- as.numeric(final_df$`Hydrophobic Value`) #makes hydrophobic values numeric
+final_df$`Amino Acid` <- factor(final_df$`Amino Acid`) #makes amino acids factors
+final_df$Index <- rollapplyr(final_df$`Hydrophobic Value`, 20, mean, partial=TRUE) #creates a hydrophobic index value for each amino acid position by calculating a rolling average of 20 hydrophobic values at a time
+head(final_df, n =10)
+
+```
+
+  This code uses custom functions that create new columns for amino acids and hydrophobic values. Each codon specifies a particular amino acid, and the function uses gsub to assign an amino acid to each codon in a new column. Similary, each amino acid has a particular hydrophobic value that is likewise filled in using gsub. An amino acid postion column is also created to arrange the amino acids from beginning to end in the sequence that they would appear in while forming the protein. Finally, an index value based off the hydrophobic value is calculated using a rolling average function. This index value is essential to contructing hydophobicity plots. 
+
+### *Hydrophobicity plot*
+```{r warning=FALSE}
+ggplot(final_df, aes(x = AA_position, y = Index)) + 
+  geom_line() +
+  geom_hline(yintercept = 0)+
+  geom_hline(yintercept = 1.6, color = "blue") +
+  ylim(-2, 2) +
+  coord_fixed(ratio = 50) #creates hydrophobicity plot, areas above the blue line are representative of likely transmembrane regions
+```
+
+  The plot above is a common example of a hydrophobicity plot using the Kyte-Doolittle scale. Kyte and Doolittle performed some of the first work on identifying transmembrane regions within proteins. They assigned every amino acid a hydrophobic value (the same value I assigned to each amino acid) based off extensive testing and labwork. Positive values indicate hydrophobic amino acids while negative values represent hydrophilic amino acids according to their research. The peaks of the plots, in particular areas above 1.6, are representative of transmembrane regions. These plots can be used as a starting point in determining protein type, however they are not always conclusive. I will now extract further data from the genetic sequence and create more features to better identify protein type. 
+
+## Feature Engineering
+
+### *Calculating summary statistics for the protein*
+```{r}
+aa_vector <- table(final_df$`Amino Acid`) #creates a table of all the amino acids from the protein
+unlist(aa_vector) #creates a count of every amino acid
+all_amino_acids <- aa_vector[c("Ala", "Arg", "Asn", "Asp", "Cys", "Gln", "Glu", "Gly", "His", "Ile", "Leu", "Lys", "Met", "Phe", "Pro", "Ser", "Thr", "Trp", "Tyr", "Val")] #assigns the count of every amino acid to a table all_amino_acids
+hydrophobic_amino_acids <- aa_vector[c("Ala", "Cys", "Ile", "Leu", "Met", "Phe", "Val")] #assigns the hydrophobic amino acids to a table hydrophobic_amino_acids
+
+#Average hydrophobic value of entire protein
+Mean_HydrophobicValue <- mean(final_df$`Hydrophobic Value`, na.rm = TRUE) #calculates the average hydrophobic value of the protein
+
+#Percentage of all amino acids in protein
+Percentage_AminoAcids <- (all_amino_acids/nrow(final_df)) *100 #calculates the percentage of every amino acid in the protein
+
+#Percentage of all hydrophobic amino acids in protein
+Percentage_HydrophobicAminoAcids <- ((sum(hydrophobic_amino_acids))/nrow(final_df)) *100 #calculates the sum percentage of the all amino acids with a positive hydrophobic value
+
+#Number of times Index is greater or equal to 1.6
+Total_Index <- sum(final_df$Index >= 1.6, na.rm = TRUE) #calculates the total amount of times the index value is greater than 1.6 which likely signifies a transmembrane region 
+
+```
+
+  This code calculates various summary statistics for the protein based off the amino acid profile. First, all amino acids our unlisted from the data frame and assigned to the vector all_amino_acids. Using this vector, the percentage of all amino acids in the protein are calculated and assigned to the table Percentage_AminoAcids. Next, only hydrophobic amino acids are selected and placed into a separate vector called hydrophobic_amino_acids. This vector is used to calculate the percentage of hydrophobic amino acids in the protein and assigned to the value Percentage_HydrophobicAminoAcids. The average hydrophobic value of the entire protein is calculated and assigned to the value Mean_HydrophobicValue. Finally, the number of times the Index value exceeds 1.6 is calculated and assigned to value Total_Index. As noted before, while using the Kyte-Doolitle scale, an index value over 1.6 is a strong indication of a transmembrane region within a protein.
+
+### *Create and clean data frame for individual protein*
+```{r}
+ProteinSummary <- data.frame(Mean_HydrophobicValue, Percentage_AminoAcids, Percentage_HydrophobicAminoAcids, Total_Index) #places the above statistics into a data frame
+ProteinSummary <- spread(ProteinSummary, Var1, Freq) #places all features into separate columns
+ProteinSummary["Type"] <- "Non-membrane" #creates a column for the protein type; this is researched beforehand 
+ProteinSummary["Protein"] <- "AQP5" #creates a column for the protein name
+ProteinSummary <- ProteinSummary[colnames(ProteinSummary)[c(25, 24, 1:23)]] #reorganizes the columns
+colnames(ProteinSummary)[3] <- "Average_Hydrophobic" #change column name
+colnames(ProteinSummary)[4] <- "Percentage_Hydrophobic" #change column name
+colnames(ProteinSummary)[5] <- "Index_Count" #change column name
+print(ProteinSummary)
+
+#Add data frame to final data frame and save
+#ProteinComparison_df <- full_join(ProteinSummary, ProteinComparison_df) #adds recently completed protein data frame to final, aggregated protein data frame
+#write.csv(ProteinComparison_df, file = "ProteinComparison_df") #saves final data frame 
+
+```
+
+  This section of code takes the statistics captured from the protein in values Mean_HydrophobicValue, Percentage_HydrophobicAminoAcids and Total_Index, as well as table Percentage_AminoAcids and creates a data frame ProteinSummary. The type of protein, transmembrane or non-membrane, is added to the data frame and so is the actual name of the protein. The data frame is then cleaned up and column names are added. Finally, once each protein data frame is completed it is added to the final data frame (10 rows shown below) which contains information for every protein analyzed. This data frame is what will ultimately be used to compare the characteristics between each type of protein and wil contain the data to develop my predictive model.
+
+```{r echo = FALSE}
+head(ProteinComparison_df, n = 10)
+```
+
+
+# **Exploratory Data Analysis:**
+
+### *Calculate mean, variance and standard deviation for average hydrophobic and percentage hydrophic values*
+```{r}
+#average hydrophobic mean for both protein types
+A.H.mean <- ddply(ProteinComparison_df, "Type", summarise, Average_Hydrophobic.mean = mean(Average_Hydrophobic)) 
+#percentage hydrophobic mean for both protein types
+P.H.mean <- ddply(ProteinComparison_df, "Type", summarise, Percentage_Hydrophobic.mean = mean(Percentage_Hydrophobic)) 
+#average hydrophobic variance for both protein types
+A.H.var <- ddply(ProteinComparison_df, "Type", summarise, Average_Hydrophobic.var = var(Average_Hydrophobic))
+#percentage hydrophobic variance for both protein types
+P.H.var <- ddply(ProteinComparison_df, "Type", summarise, Percentage_Hydrophobic.var = var(Percentage_Hydrophobic)) 
+#average hydrophobic standard deviation for both protein types
+A.H.sd <- ddply(ProteinComparison_df, "Type", summarise, Average_Hydrophobic.sd = sd(Average_Hydrophobic)) 
+#percentage hydrophobic standard deviation for both protein types
+P.H.sd <- ddply(ProteinComparison_df, "Type", summarise, Percentage_Hydrophobic.sd = sd(Percentage_Hydrophobic))
+
+#Calculate mean index value for both types  
+ProteinComparison_df$Index_Count <- as.numeric(ProteinComparison_df$Index_Count) #makes Index_Count numeric
+Index.mean <- ddply(ProteinComparison_df, "Type", summarise, Index_Count.mean = mean(Index_Count)) #calculates average index count for both protein types
+
+```
+
+  The first part of my exploratory data analysis was to find the mean, variance and standard deviation for the first three features of my data frame; Average_Hydrophobic value, Percentage_Hydrophobic value and Index_Count, for both protein types. The code above calculates all of these statistics and below I have made density plots to visualize any differences between types.  
+
+### *Average Hydrophobic Density Plot*
+```{r}
+ggplot(ProteinComparison_df, aes(x = Average_Hydrophobic, fill = Type)) +
+  geom_density(alpha = 0.3) +
+  geom_vline(data = A.H.mean, aes(xintercept = Average_Hydrophobic.mean, colour = Type),
+             linetype = "dashed", size = 1)
+```
+
+### *Percentage Hydrophobic Density Plot*
+```{r}
+ggplot(ProteinComparison_df, aes(x = Percentage_Hydrophobic, fill = Type)) +
+  geom_density(alpha = 0.3) +
+  geom_vline(data = P.H.mean, aes(xintercept = Percentage_Hydrophobic.mean, colour = Type),
+             linetype = "dashed", size = 1)
+```
+
+### *Index Count Density Plot*
+```{r}
+ggplot(ProteinComparison_df, aes(x = Index_Count, fill = Type)) +
+  geom_density(alpha = 0.3) +
+  geom_vline(data = Index.mean, aes(xintercept = Index_Count.mean, colour = Type),
+             linetype = "dashed", size = 1)
+```
+
+  Density plots show the distribution of data over a continuous interval and based on the above plots there appears to be a difference between transmembrane and non-membrane proteins in terms of the average hydrophobic values, the percentage of hydrophobic amino acids and the index count. Next I examined every amino acid in detail to see what, if any role they play in determining protein type.    
+
+### *Calculating mean for each amino acid based on type*
+```{r}
+  Ala.mean <- ddply(ProteinComparison_df, "Type", summarise, Ala = mean(Ala))
+  Arg.mean <- ddply(ProteinComparison_df, "Type", summarise, Arg = mean(Arg))
+  Asn.mean <- ddply(ProteinComparison_df, "Type", summarise, Asn = mean(Asn))
+  Asp.mean <- ddply(ProteinComparison_df, "Type", summarise, Asp = mean(Asp))
+  Cys.mean <- ddply(ProteinComparison_df, "Type", summarise, Cys = mean(Cys))
+  Gln.mean <- ddply(ProteinComparison_df, "Type", summarise, Gln = mean(Gln))  
+  Glu.mean <- ddply(ProteinComparison_df, "Type", summarise, Glu = mean(Glu))
+  Gly.mean <- ddply(ProteinComparison_df, "Type", summarise, Gly = mean(Gly))
+  His.mean <- ddply(ProteinComparison_df, "Type", summarise, His = mean(His))
+  Ile.mean <- ddply(ProteinComparison_df, "Type", summarise, Ile = mean(Ile))
+  Leu.mean <- ddply(ProteinComparison_df, "Type", summarise, Leu = mean(Leu))
+  Met.mean <- ddply(ProteinComparison_df, "Type", summarise, Met = mean(Met))
+  Lys.mean <- ddply(ProteinComparison_df, "Type", summarise, Lys = mean(Lys))  
+  Phe.mean <- ddply(ProteinComparison_df, "Type", summarise, Phe = mean(Phe))
+  Pro.mean <- ddply(ProteinComparison_df, "Type", summarise, Pro = mean(Pro))
+  Ser.mean <- ddply(ProteinComparison_df, "Type", summarise, Ser = mean(Ser))
+  Thr.mean <- ddply(ProteinComparison_df, "Type", summarise, Thr = mean(Thr))
+  Trp.mean <- ddply(ProteinComparison_df, "Type", summarise, Trp = mean(Trp))
+  Tyr.mean <- ddply(ProteinComparison_df, "Type", summarise, Tyr = mean(Tyr))
+  Val.mean <- ddply(ProteinComparison_df, "Type", summarise, Val = mean(Val))
+  
+#Create data frame for all amino acid means
+#AA_mean <- full_join(AA_mean, Val.mean) #join all amino acid means into one data frame
+print(AA_mean)
+```
+
+  This code simply calculates the mean for every amino acid based off type and stores it into the data frame AA_mean. The next step rearranges the data frame in order to plot a histogram to better visualize any differences between means. 
+
+### *Bar chart of amino acid averages based on type*
+```{r warning = FALSE}
+AA_mean2 <- gather(AA_mean, Amino_Acid, Mean, 2:21) #rearrange data frame for bar chart
+
+ggplot(AA_mean2, aes(fill = Type, x = Amino_Acid, y = Mean)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust =1))
+```
+
+  Based off the histogram above it appears the amino acids Glu, Leu, Lys and Trp may play a role in determining the protein type. To ascertain the statistical significance of these features, I next ran t-tests on each, as well as the previous three features.
+
+### *Statistical significance tests*
+```{r}
+#Leu t-test
+t.test(ProteinComparison_df$Leu[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Leu[ProteinComparison_df$Type=="Non-membrane"])
+#Lys t-test
+t.test(ProteinComparison_df$Lys[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Lys[ProteinComparison_df$Type=="Non-membrane"])
+#Cys t-test
+t.test(ProteinComparison_df$Cys[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Cys[ProteinComparison_df$Type=="Non-membrane"])
+#Glu t-test
+t.test(ProteinComparison_df$Glu[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Glu[ProteinComparison_df$Type=="Non-membrane"])
+#Trp t-test
+t.test(ProteinComparison_df$Trp[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Trp[ProteinComparison_df$Type=="Non-membrane"])
+#Percentage_Hydrophobic t-test
+t.test(ProteinComparison_df$Percentage_Hydrophobic[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Percentage_Hydrophobic[ProteinComparison_df$Type=="Non-membrane"])
+#Average_Hydrophobic t-test
+t.test(ProteinComparison_df$Average_Hydrophobic[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Average_Hydrophobic[ProteinComparison_df$Type=="Non-membrane"])
+#Index_Count t-test
+t.test(ProteinComparison_df$Index_Count[ProteinComparison_df$Type=="Transmembrane"], ProteinComparison_df$Index_Count[ProteinComparison_df$Type=="Non-membrane"])
+```
+
+  Examining the t-test results, the amino acids Leu, Lys and Cys show strong statistical significance with p-values of 0.0010, 0.0008 and 0.0052 respectively. The amino acids Trp and Glu also show significance, though not as strong, with p-values of 0.0126 and 0.0319. Average_Hydrophobic value also showed very strong significance with a p-value of 0.0006, while Percentage_Hydrophobic value and Index_Count had larger p-values of 0.0270 and 0.0093. After running the t-tests there appears to be enough features showing significance to develop a model that can accurately and efficiently predict protein type from genetic code data. 
+
+# **Model Building:**
+
+  Now that I have completed my exploratory analysis and calculated summary statistics for the data, I have decided on a logistic regression model to predict protein type. Since I am essentially working on a binary classification problem, logistic regression will be a good starting point and will become my base model. I will be classifying proteins based off type, either transmembrane or non-membrane, which I will assign 0 for transmembrane and 1 for non-membrane. The features I will use as predictors will be the summary statistics I calculated during the data wrangling process. These include the average hydrophobic value for each protein, the percentage of hydrophobic amino acids, the index count as well as the percentage of every amino acid. Although I have previously found features that appear to show significance (Average_Hydrophobic, Percentage_Hydrophobic, Index_Count, Lys, Leu, Cys, Trp and Glu), I will begin the modeling process by looking at all the features and narrow it down to the simplest, most accurately predicting model which also avoids overfitting. After I have a working base model, I will attempt to make a decision tree model that can improve upon the accuracy of the base model. Similarly, I will look at all the features and parse it down to as few as possible predictors that still produce a strong model.
+
+### *Create binary column for prediction and split into training and testing data sets*
+```{r}
+ProteinComparison_df$Type2 <- ProteinComparison_df$Type #create new column Type2
+ProteinComparison_df$Type2 <- gsub("Transmembrane", "0", ProteinComparison_df$Type2) #assign 0 to transmembrane proteins
+ProteinComparison_df$Type2 <- gsub("Non-membrane", "1", ProteinComparison_df$Type2) #assign 1 to non-membrane proteins
+ProteinComparison_df$Type2 <- factor(ProteinComparison_df$Type2) #make Type2 column factors
+
+#index <- sample(1:nrow(ProteinComparison_df),36) #split final data frame randomly 
+#train_df <- ProteinComparison_df[index, ] #place ~70% of data frame into training set
+#test_df <- ProteinComparison_df[-index, ] #place ~30% of data frame into testing set
+```
+  
+  The first step in producing my model was to create a new column that assigns transmembrane to the value 0 and non-membrane to 1 and converting those values to factors. Next, I split my final data frame containing all 52 proteins randomly into a training set and a testing set. Roughly 70% of the data frame went into the training set while the remaining percentage was placed in the testing set. 
+
+### *Logistic Regression Model Creation*
+
+```{r}
+model1 <- glm(Type2 ~ Average_Hydrophobic + Lys + Met + Trp, family = "binomial", data = train_df)
+anova(model1, test = "Chisq") #measure of significance for each feature
+```
+  
+  To begin the modelling process I first examined every feature from my data frame. After running the model several times and examining the significance for all the features, I settled on the features Average_Hydrophobic, Lys, Met and Trp for my final model. Three of these features also showed strong significance in the t-tests which should provide for a good model. Next, I will run the model on the training set to get a baseline of how the model is performing.
+
+### *Logistic Regression Model Training*
+
+```{r}
+#Model testing with ROC curve and auc
+prob <- predict(model1, newdata = train_df, type = "response")
+pred <- prediction(prob, train_df$Type2)
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(perf) #plots ROC curve 
+auc <- performance(pred, measure = "auc")
+auc <- auc@y.values[[1]]
+auc #value represents percentage of training accuracy
+```
+
+  This code generates a ROC curve which is used to measure binomial classification model performance at varied discrimination thresholds. In my model, the auc(area under curve) represents the percentage of accurately predicted proteins based off type. For the model training we are getting a classification accuracy of 97.8% which is very good. Now we will run the model on the testing set to get a true indication of model performance.
+
+### *Logisitic Regression Model Prediction*
+
+```{r}
+#Model prediction with ROC curve and auc
+prob <- predict(model1, newdata = test_df, type = "response")
+pred <- prediction(prob, test_df$Type2)
+perf <- performance(pred, measure = "tpr", x.measure = "fpr")
+plot(perf) #plots ROC curve 
+auc <- performance(pred, measure = "auc")
+auc <- auc@y.values[[1]]
+auc #value represents percentage of accurately predicted proteins
+
+table(test_df$Type2, prob > 0.5) #confusion matrix shows sensitivity and specificity
+```
+
+  To determine the model's performance we again create a ROC curve and find the auc value, but this time we run the code on the testing set. The model has not seen this data so this will give an indication of how accurate our model is performing. This time the percentage of accurately classified proteins was 71.4%. Displaying the confusion matrix shows the sensitivity of the model at 71.4% and specificity at 66.7%. Overall, this is a strong base model but I will also create a decision tree model to see if that can outperform the current model.
+
+### *Decision Tree Model Creation*
+
+```{r}
+train_tree <- C5.0(Type2 ~ Average_Hydrophobic + Met + Trp, data = train_df)
+plot(train_tree)
+```
+
+  Like the base model, to create the decision tree model I first examined all the features of the data frame. Plotting the tree shows which features are significant and I was able to parse the features down to just three: Average_Hydrophobic, Met and Trp. Once I had this model the next step was to run the model on the testing set.
+
+### *Decision Tree Model Prediction*
+
+```{r}
+results <- predict(object = train_tree, newdata = test_df, type = "class")
+table(results, test_df$Type2)
+```
+
+  To determine the accuracy of the decision tree model, predictions were made on the testing set and then displayed in a confusion matrix. Accurate predictions are displayed in the box corresponding to 0,0 and 1,1. Missed predictions are displayed in the other boxes as 0,1 and 1,0. From the confusion matrix we see that the model accurately predicted 13 proteins and missed on 3 proteins. This computes to an accuracy of 81.3%, close to a 10% increase from the base model. Sensitivity of the decision tree model was at 75.0% and specificity was at 87.5%, both higher than the base model. 
+
+# **Conclusion:**
+
+  In conclusion, the code for this project can efficiently take the base genetic code of a protein, convert it into the corresponding amino acid profile and from that profile numerous features of the protein are discerned and used as predictors in the models. We have formed two highly accurate models, both predicting protein type based off base code data at a rate above 70%. However, it is important to note that we are dealing with a small sample size, only 52 out of the roughly 20,000 human proteins were analyzed. Developing a way to automate the process of loading the FASTA protein files in the code automatically will enable many more proteins to be analyzed and that in turn will greatly increase our confidence in the perfomance of both models. Another way to improve upon the current project would be to develop more features for each protein. Proteins are known to span membranes in either an alpha-helix or beta-barrel conformation and one possibility would be to attempt to identify these conformations from the amino acid profile. This would also help to further understand the exact function of the transmembrane proteins. With further reasearch, its also possible that additional features could be created that can further distinguish protein type, such as is the protein structural or an enzyme or a motor protein, ect. Currently though, the findings from this project can still be beneficial to many potential clients. 
+  The main emphasis of this project was to develop a way for anyone studying a particular protein to have an effecient way to ascertain its function and location besides traditional laboratory methods, which can be both costly and time consuming. We have shown that, any potential client who has a protein's genetic code data, which is becoming easier and less costly to acquire, they can run it thru the program and have a good idea as to whether the protein is transmembrane or non-membrane. Knowing the protein type is the first clue in determining its function as transmembrane proteins play a much different role than non-membrane proteins. Another application of knowing the protein type is drug development. Most drugs are targeted to proteins on the outside of the cell and anchored to the membrane the cell. This makes identifying transmembrane proteins a critical step in biomedical research. Finally, if researchers are attempting to find a protein's location within the cell via laboratory methods, this program could provide quick verification once laboratory testing has been completed. Overall, while developing more features and analyzing more proteins will increase the validity of the models, the results of this project can still be used in a variety of ways to cut down costs and save time for clients from multiple industries.    
+    
